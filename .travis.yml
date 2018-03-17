@@ -12,3 +12,4 @@ deploy:
   on:
     repo: detiber/vagrant-aws
     branch: detiber
+    rvm: 2.3
