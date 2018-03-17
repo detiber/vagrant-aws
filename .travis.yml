@@ -1,6 +1,15 @@
 language: ruby
 sudo: false
+cache: bundler
 rvm:
 - ruby-head
 - 2.3
 - 2.2
+deploy:
+  provider: rubygems
+  api_key:
+    secure: D0KiV8OTiQvvBN1fSncHckTXjr5o0QfQDRrxItCXU24CVL/k0Hg+O1xhra4LbItHEFmeO0z2OR1seNnGuC7STbBlcpDu4kQXee2C52IQ++7vLyGUm+tKuicjvnsDqWp5ndIJMyGw006bvn7gqbkkuz54iGphgHJ+WNKJifWv31lPyn+fBc6/YIw4Gec5nY3azwIJJdLvoD2KOMhragEaAV3nuHgreCKRGD1fs+xIKqwW0qOtmmJDO901Zlcj5WvEBiRajfkcnJ+HjCwaMylYzUgN3wRix/s58vCZ5sVnusSXx6CP0fgd44MfSkHis6/gAQ5cWIsoERNOTJGJpYAcDLYsVRHEykswTL1KtJvX7VvPo3wnUqpMANhRvcSdsGc4FbO7qeYnOESkjEB98IaN7jduteIJv0zwGkY/0+iBFZAPd9FPTfkfdQWyHGCg+9aCzudnLdACJPYbacHOaI/eNFWUnbFuav84DXpp0eZiaaZIdip88+Rsj3bzsY4Bb0aDmDnNk5FSmO3OQOhwhhbLp+xUlGoRGimT59R20maGH9vzx8bQBzOZA5tsEetkLEbR3fRZd6C7k+G9y5sAoDA6kHY5M3q6ReR1bijKAkmkngY7Qd4rD+64kDpNN1LnjFdWAzQcl3MWxWMwpgLdoPG1qrP1PZbtGuGHnZjp4QIJAcc=
+  gem: vagrant-aws-detiber
+  on:
+    repo: detiber/vagrant-aws
+    branch: detiber

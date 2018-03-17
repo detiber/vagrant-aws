@@ -1,5 +1,6 @@
 require "vagrant"
 require "iniparse"
+require "log4r"
 
 module VagrantPlugins
   module AWS
@@ -196,6 +197,9 @@ module VagrantPlugins
       # @return [String]
       attr_accessor :aws_profile
 
+      # The selected AWS role arn (as defined in $HOME/.aws/* files)
+      attr_accessor :aws_role_arn
+
       def initialize(region_specific=false)
         @access_key_id             = UNSET_VALUE
         @ami                       = UNSET_VALUE
@@ -233,6 +237,7 @@ module VagrantPlugins
         @tenancy                   = UNSET_VALUE
         @aws_dir                   = UNSET_VALUE
         @aws_profile               = UNSET_VALUE
+        @aws_role_arn              = UNSET_VALUE
 
         # Internal state (prefix with __ so they aren't automatically
         # merged)
@@ -321,9 +326,10 @@ module VagrantPlugins
         # then try to read from environment variables first, and if it fails from
         # the AWS folder.
         if @access_key_id == UNSET_VALUE or @secret_access_key == UNSET_VALUE
-          @aws_profile = 'default' if @aws_profile == UNSET_VALUE
+          @aws_profile = ENV['AWS_PROFILE'] if @aws_profile == UNSET_VALUE
+          @aws_profile = 'default' if @aws_profile.nil?
           @aws_dir = ENV['HOME'].to_s + '/.aws/' if @aws_dir == UNSET_VALUE
-          @region, @access_key_id, @secret_access_key, @session_token = Credentials.new.get_aws_info(@aws_profile, @aws_dir)
+          @region, @access_key_id, @secret_access_key, @session_token, @aws_role_arn = Credentials.new.get_aws_info(@aws_profile, @aws_dir)
           @region = UNSET_VALUE if @region.nil?
         else
           @aws_profile = nil
@@ -510,42 +516,80 @@ module VagrantPlugins
             aws_creds = location + 'credentials'
           end
           if File.exist?(aws_config) and File.exist?(aws_creds)
-            aws_region, aws_id, aws_secret, aws_token = read_aws_files(profile, aws_config, aws_creds)
+            aws_region, aws_id, aws_secret, aws_token, aws_role_arn = read_aws_files(profile, aws_config, aws_creds)
           end
         end
         aws_region = nil if aws_region == ''
+        aws_role_arn = nil if aws_role_arn == ''
         aws_id     = nil if aws_id == ''
         aws_secret = nil if aws_secret == ''
         aws_token  = nil if aws_token == ''
 
-        return aws_region, aws_id, aws_secret, aws_token
+        return aws_region, aws_id, aws_secret, aws_token, aws_role_arn
       end
 
 
       private
 
-      def read_aws_files(profile, aws_config, aws_creds)
+      def config_section_from_profile(profile)
         # determine section in config ini file
-        if profile == 'default'
-          ini_profile = profile
+        case profile
+        when 'default'
+          return profile
+        when /^profile .*/
+          return profile
         else
-          ini_profile = 'profile ' + profile
+          return 'profile ' + profile
         end
-        # get info from config ini file for selected profile
+      end
+
+      def source_profile_from_profile(profile, cfg)
+        return cfg[config_section_from_profile(profile)]['source_profile']
+      end
+
+      def value_from_config(profile, key, cfg)
+        config_profile = config_section_from_profile(profile)
+        source_profile = source_profile_from_profile(profile, cfg)
+
+        value = cfg[config_profile][key]
+        if value.nil? and not source_profile.nil?
+          return value_from_config(source_profile, key, cfg)
+        end
+        return value
+      end
+
+      def value_from_creds(profile, key, cfg, creds)
+        config_profile = config_section_from_profile(profile)
+        source_profile = source_profile_from_profile(profile, cfg)
+
+        value = nil
+
+        if creds.has_section?(profile)
+          value = creds[profile][key]
+        end
+
+        if value.nil? and not source_profile.nil?
+          return value_from_creds(source_profile, key, cfg, creds)
+        end
+
+        return value
+      end
+
+      def read_aws_files(profile, aws_config, aws_creds)
+        # read and parse the config file
         data = File.read(aws_config)
-        doc_cfg = IniParse.parse(data)
-        aws_region = doc_cfg[ini_profile]['region']
+        config = IniParse.parse(data)
 
-        # determine section in credentials ini file
-        ini_profile = profile
-        # get info from credentials ini file for selected profile
+        aws_region = value_from_config(profile, 'region', config)
+        aws_role_arn = value_from_config(profile, 'role_arn', config)
+
         data = File.read(aws_creds)
-        doc_cfg = IniParse.parse(data)
-        aws_id = doc_cfg[ini_profile]['aws_access_key_id']
-        aws_secret = doc_cfg[ini_profile]['aws_secret_access_key']
-        aws_token = doc_cfg[ini_profile]['aws_session_token']
-
-        return aws_region, aws_id, aws_secret, aws_token
+        creds = IniParse.parse(data)
+        aws_id = value_from_creds(profile, 'aws_access_key_id', config, creds)
+        aws_secret = value_from_creds(profile, 'aws_secret_access_key', config, creds)
+        aws_token = value_from_creds(profile, 'aws_session_token', config, creds)
+        
+        return aws_region, aws_id, aws_secret, aws_token, aws_role_arn
       end
 
       def read_aws_environment()
